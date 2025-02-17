@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Respiree MQTT Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-2xl font-bold mb-4">Respiree MQTT Client</h1>
+            
+            <!-- Connection Status -->
+            <div class="mb-4">
+                <p>Status: <span id="connection-status" class="font-semibold text-red-500">Disconnected</span></p>
+            </div>
+
+            <!-- Connection Controls -->
+            <div class="mb-6">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <input type="text" id="server-input" 
+                        class="border rounded px-3 py-2" 
+                        value="domain.com"
+                        placeholder="Server">
+                    <input type="text" id="port-input" 
+                        class="border rounded px-3 py-2" 
+                        value="8883"
+                        placeholder="Port">
+                    <input type="text" id="username-input" 
+                        class="border rounded px-3 py-2" 
+                        value="respiree"
+                        placeholder="Username">
+                    <input type="password" id="password-input" 
+                        class="border rounded px-3 py-2" 
+                        value="respiree@2020"
+                        placeholder="Password">
+                </div>
+                <button id="connect-btn" 
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
+                    Connect
+                </button>
+                <button id="disconnect-btn" 
+                    class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600" 
+                    disabled>
+                    Disconnect
+                </button>
+            </div>
+
+            <!-- Device Selection -->
+            <div class="mb-6">
+                <select id="device-select" class="border rounded px-3 py-2 w-full">
+                    <option value="a">Device A</option>
+                    <option value="b">Device B</option>
+                    <option value="c">Device C</option>
+                    <option value="d">Device D</option>
+                    <option value="e">Device E</option>
+                    <option value="f">Device F</option>
+                </select>
+            </div>
+
+            <!-- Subscribe Controls -->
+            <div class="mb-6 p-4 border rounded bg-gray-50">
+                <h3 class="font-bold mb-2">Subscribe to Topics</h3>
+                <div class="space-y-2">
+                    <div>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" class="form-checkbox" value="esp32-admin/server/report" checked>
+                            <span class="ml-2">Report State Topic</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" class="form-checkbox" value="sg dev {device}/b/c" checked>
+                            <span class="ml-2">Device Topic</span>
+                        </label>
+                    </div>
+                    <button id="subscribe-btn" 
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2"
+                        disabled>
+                        Subscribe
+                    </button>
+                </div>
+            </div>
+
+            <!-- Messages Log -->
+            <div class="border rounded p-4 h-64 overflow-y-auto bg-gray-50">
+                <div id="messages" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let client = null;
+
+        // DOM Elements
+        const statusEl = document.getElementById('connection-status');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const subscribeBtn = document.getElementById('subscribe-btn');
+        const deviceSelect = document.getElementById('device-select');
+        const messagesEl = document.getElementById('messages');
+
+        // Connect to MQTT broker
+        connectBtn.addEventListener('click', () => {
+            try {
+                const server = document.getElementById('server-input').value;
+                const port = document.getElementById('port-input').value;
+                const username = document.getElementById('username-input').value;
+                const password = document.getElementById('password-input').value;
+
+                // Construct broker URL
+                const brokerUrl = `wss://${server}:${port}/mqtt`;
+                
+                // Connect to MQTT broker
+                client = mqtt.connect(brokerUrl, {
+                    clientId: 'respiree_client_' + Math.random().toString(16).substr(2, 8),
+                    username: username,
+                    password: password,
+                    protocolVersion: 4,
+                    clean: true,
+                    connectTimeout: 4000,
+                    reconnectPeriod: 1000,
+                    keepalive: 60
+                });
+
+                client.on('connect', () => {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'font-semibold text-green-500';
+                    
+                    // Enable/disable controls
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    subscribeBtn.disabled = false;
+
+                    document.getElementById('server-input').disabled = true;
+                    document.getElementById('port-input').disabled = true;
+                    document.getElementById('username-input').disabled = true;
+                    document.getElementById('password-input').disabled = true;
+
+                    addMessage('System', 'Connected to MQTT broker');
+                    
+                    // Auto-subscribe to topics
+                    subscribeToTopics();
+                });
+
+                client.on('message', (topic, message) => {
+                    const messageStr = message.toString();
+                    addMessage('Message', `${topic}: ${messageStr}`);
+                });
+
+                client.on('close', () => {
+                    handleDisconnect();
+                    addMessage('System', 'Disconnected from broker');
+                });
+
+                client.on('error', (error) => {
+                    handleDisconnect();
+                    addMessage('Error', 'MQTT error occurred');
+                    console.error('MQTT error:', error);
+                });
+
+            } catch (error) {
+                alert('Failed to connect to MQTT broker: ' + error.message);
+                console.error('Connection error:', error);
+            }
+        });
+
+        // Disconnect from broker
+        disconnectBtn.addEventListener('click', () => {
+            if (client) {
+                client.end();
+            }
+        });
+
+        // Subscribe to topics
+        subscribeBtn.addEventListener('click', subscribeToTopics);
+
+        // Update topics when device selection changes
+        deviceSelect.addEventListener('change', () => {
+            if (client && client.connected) {
+                subscribeToTopics();
+            }
+        });
+
+        function subscribeToTopics() {
+            const device = deviceSelect.value;
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    let topic = checkbox.value;
+                    
+                    // Replace {device} placeholder with selected device
+                    topic = topic.replace('{device}', device);
+                    
+                    client.subscribe(topic, (err) => {
+                        if (!err) {
+                            addMessage('System', `Subscribed to ${topic}`);
+                        } else {
+                            addMessage('Error', `Failed to subscribe to ${topic}`);
+                        }
+                    });
+                }
+            });
+        }
+
+        function addMessage(sender, message) {
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message text-sm';
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            
+            messageEl.innerHTML = `
+                <span class="text-gray-500">[${timestamp}]</span>
+                <span class="font-semibold">${sender}:</span>
+                <span class="ml-2">${message}</span>
+            `;
+            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
+        }
+
+        function handleDisconnect() {
+            statusEl.textContent = 'Disconnected';
+            statusEl.className = 'font-semibold text-red-500';
+            
+            // Reset controls
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            subscribeBtn.disabled = true;
+
+            document.getElementById('server-input').disabled = false;
+            document.getElementById('port-input').disabled = false;
+            document.getElementById('username-input').disabled = false;
+            document.getElementById('password-input').disabled = false;
+            
+            client = null;
+        }
+    </script>
+</body>
+</html>
