@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Price Tracker</title>
+    <title>WebSocket Demo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
 </head>
 <body class="bg-gray-100 p-8">
     <div class="max-w-2xl mx-auto">
         <div class="bg-white rounded-lg shadow-md p-6">
-            <h1 class="text-2xl font-bold mb-4">Crypto Price Tracker</h1>
+            <h1 class="text-2xl font-bold mb-4">WebSocket Demo</h1>
             
             <!-- Connection Status -->
             <div class="mb-4">
@@ -18,6 +18,10 @@
 
             <!-- Connection Controls -->
             <div class="mb-6">
+                <input type="text" id="server-url" 
+                    class="w-full p-2 border rounded mb-2" 
+                    placeholder="WebSocket URL (e.g., wss://echo.websocket.org)"
+                    value="wss://echo.websocket.org">
                 <button id="connect-btn" 
                     class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
                     Connect
@@ -29,19 +33,20 @@
                 </button>
             </div>
 
-            <!-- Price Display -->
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div class="border rounded p-4 bg-gray-50">
-                    <h3 class="font-bold mb-2">Bitcoin (BTC)</h3>
-                    <p>$<span id="btc-price">---.--</span></p>
-                </div>
-                <div class="border rounded p-4 bg-gray-50">
-                    <h3 class="font-bold mb-2">Ethereum (ETH)</h3>
-                    <p>$<span id="eth-price">---.--</span></p>
-                </div>
+            <!-- Message Input -->
+            <div class="mb-6">
+                <input type="text" id="message-input" 
+                    class="w-full p-2 border rounded mb-2" 
+                    placeholder="Type a message..."
+                    disabled>
+                <button id="send-btn" 
+                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                    disabled>
+                    Send Message
+                </button>
             </div>
 
-            <!-- Updates Log -->
+            <!-- Messages Display -->
             <div class="border rounded p-4 h-64 overflow-y-auto bg-gray-50">
                 <div id="messages" class="space-y-2"></div>
             </div>
@@ -50,20 +55,27 @@
 
     <script>
         let socket = null;
-        const WEBSOCKET_URL = 'wss://ws.coincap.io/prices?assets=bitcoin,ethereum';
 
         // DOM Elements
         const statusEl = document.getElementById('connection-status');
+        const serverUrlEl = document.getElementById('server-url');
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
         const messagesEl = document.getElementById('messages');
-        const btcPriceEl = document.getElementById('btc-price');
-        const ethPriceEl = document.getElementById('eth-price');
 
         // Connect to WebSocket server
         connectBtn.addEventListener('click', () => {
+            const serverUrl = serverUrlEl.value.trim();
+            
+            if (!serverUrl) {
+                alert('Please enter a WebSocket server URL');
+                return;
+            }
+
             try {
-                socket = new WebSocket(WEBSOCKET_URL);
+                socket = new WebSocket(serverUrl);
 
                 socket.addEventListener('open', () => {
                     statusEl.textContent = 'Connected';
@@ -72,29 +84,16 @@
                     // Enable/disable controls
                     connectBtn.disabled = true;
                     disconnectBtn.disabled = false;
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    serverUrlEl.disabled = true;
 
                     // Add connection message
-                    addMessage('System', 'Connected to CoinCap WebSocket');
+                    addMessage('System', 'Connected to server');
                 });
 
                 socket.addEventListener('message', (event) => {
-                    const data = JSON.parse(event.data);
-                    
-                    // Update prices
-                    if (data.bitcoin) {
-                        btcPriceEl.textContent = parseFloat(data.bitcoin).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        });
-                        addMessage('Update', `Bitcoin: $${data.bitcoin}`);
-                    }
-                    if (data.ethereum) {
-                        ethPriceEl.textContent = parseFloat(data.ethereum).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        });
-                        addMessage('Update', `Ethereum: $${data.ethereum}`);
-                    }
+                    addMessage('Server', event.data);
                 });
 
                 socket.addEventListener('close', () => {
@@ -121,19 +120,36 @@
             }
         });
 
+        // Send message
+        sendBtn.addEventListener('click', () => {
+            sendMessage();
+        });
+
+        // Also send on Enter key
+        messageInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (message && socket) {
+                socket.send(message);
+                addMessage('You', message);
+                messageInput.value = '';
+            }
+        }
+
         function addMessage(sender, message) {
             const messageEl = document.createElement('div');
-            messageEl.className = 'message text-sm';
-            
-            // Add timestamp
-            const timestamp = new Date().toLocaleTimeString();
-            
+            messageEl.className = 'message';
             messageEl.innerHTML = `
-                <span class="text-gray-500">[${timestamp}]</span>
                 <span class="font-semibold">${sender}:</span>
                 <span class="ml-2">${message}</span>
             `;
-            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
+            messagesEl.appendChild(messageEl);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
         }
 
         function handleDisconnect() {
@@ -143,9 +159,12 @@
             // Reset controls
             connectBtn.disabled = false;
             disconnectBtn.disabled = true;
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            serverUrlEl.disabled = false;
             
             socket = null;
         }
     </script>
 </body>
-<
+</html>
