@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-6">MQTT Client</h1>
+        
+        <!-- Connection Status -->
+        <div class="mb-4">
+            <span class="font-semibold">Status: </span>
+            <span id="connectionStatus" class="text-red-500">Disconnected</span>
+        </div>
+
+        <!-- Messages Container -->
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold mb-2">Messages</h2>
+            <div id="messagesContainer" class="h-48 overflow-y-auto border p-4 rounded bg-gray-50"></div>
+        </div>
+
+        <!-- Publish Form -->
+        <div class="mb-4">
+            <h2 class="text-xl font-semibold mb-2">Publish Message</h2>
+            <input type="text" id="messageInput" placeholder="Enter message" 
+                   class="w-full p-2 border rounded mb-2">
+            <button id="publishBtn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                Publish
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const options = {
+            host: 'broker.hivemq.com',
+            port: 1883,
+            protocol: 'mqtt',
+        };
+
+        // Initialize MQTT client
+        const client = mqtt.connect(options);
+        const topic = 'test/topic';
+
+        // DOM elements
+        const statusElement = document.getElementById('connectionStatus');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const publishBtn = document.getElementById('publishBtn');
+
+        // Add message to container
+        function addMessage(text) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'mb-2';
+            messageElement.textContent = `${new Date().toLocaleTimeString()}: ${text}`;
+            messagesContainer.appendChild(messageElement);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        // Connect event
+        client.on('connect', () => {
+            statusElement.textContent = 'Connected';
+            statusElement.className = 'text-green-500';
+            addMessage('Connected to MQTT broker');
+
+            // Subscribe to topic
+            client.subscribe(topic, (err) => {
+                if (err) {
+                    addMessage(`Subscribe error: ${err.message}`);
+                    return;
+                }
+                addMessage(`Subscribed to ${topic}`);
+            });
+        });
+
+        // Message event
+        client.on('message', (topic, message) => {
+            addMessage(`Received on ${topic}: ${message.toString()}`);
+        });
+
+        // Error event
+        client.on('error', (error) => {
+            statusElement.textContent = 'Error';
+            statusElement.className = 'text-red-500';
+            addMessage(`Connection error: ${error.message}`);
+        });
+
+        // Disconnect event
+        client.on('disconnect', () => {
+            statusElement.textContent = 'Disconnected';
+            statusElement.className = 'text-red-500';
+            addMessage('Disconnected from broker');
+        });
+
+        // Publish button click handler
+        publishBtn.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (message) {
+                client.publish(topic, message, (err) => {
+                    if (err) {
+                        addMessage(`Publish error: ${err.message}`);
+                        return;
+                    }
+                    addMessage(`Published: ${message}`);
+                    messageInput.value = '';
+                });
+            }
+        });
+
+        // Enter key handler for message input
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                publishBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>

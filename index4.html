@@ -3,104 +3,185 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MQTT Message Receiver</title>
+    <title>Respiree MQTT Gateway</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #f5f5f5;
-            padding: 20px;
-            border-radius: 5px;
-        }
-        .status {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 3px;
-        }
-        .connected {
-            background-color: #dff0d8;
-            color: #3c763d;
-        }
-        .disconnected {
-            background-color: #f2dede;
-            color: #a94442;
-        }
-        .message {
-            padding: 10px;
-            margin: 5px 0;
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-        }
-    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
 </head>
-<body>
-    <div class="container">
-        <h1>MQTT Message Receiver</h1>
-        <div id="status" class="status disconnected">Disconnected</div>
-        <h2>Received Messages</h2>
-        <div id="messages"></div>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-2xl font-bold mb-4">Respiree Gateway MQTT Client</h1>
+            
+            <!-- Gateway Configuration -->
+            <div class="mb-6 p-4 border rounded bg-gray-50">
+                <h2 class="font-bold mb-4">Gateway Configuration</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Server Name</label>
+                        <input type="text" id="serverName" class="border rounded px-3 py-2 w-full" 
+                               placeholder="sg-development">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">MQTT URL</label>
+                        <input type="text" id="mqttUrl" class="border rounded px-3 py-2 w-full" 
+                               placeholder="remotemqjp.respiree.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">MQTT Username</label>
+                        <input type="text" id="mqttUser" class="border rounded px-3 py-2 w-full">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">MQTT Password</label>
+                        <input type="password" id="mqttPassword" class="border rounded px-3 py-2 w-full">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Report Topic</label>
+                        <input type="text" id="mqttReportTopic" class="border rounded px-3 py-2 w-full" 
+                               placeholder="esp32-admin/server/report">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Gateway MAC</label>
+                        <input type="text" id="gatewayMac" class="border rounded px-3 py-2 w-full">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Connection Status -->
+            <div class="mb-4">
+                <p>Status: <span id="connection-status" class="font-semibold text-red-500">Disconnected</span></p>
+            </div>
+
+            <!-- Connection Controls -->
+            <div class="mb-6">
+                <button id="connect-btn" 
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
+                    Connect
+                </button>
+                <button id="disconnect-btn" 
+                    class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600" 
+                    disabled>
+                    Disconnect
+                </button>
+            </div>
+
+            <!-- Messages Log -->
+            <div class="border rounded p-4 h-64 overflow-y-auto bg-gray-50">
+                <div id="messages" class="space-y-2"></div>
+            </div>
+        </div>
     </div>
 
     <script>
-        const brokerUrl = 'wss://remotemqjp.respiree.com:8883';
-        const topic = 'esp32-admin/server/report';
-        const options = {
-            username: 'respiree',
-            password: 'respiree@2020',
-            rejectUnauthorized: false
-        };
+        let client = null;
 
-        let client;
-        const statusDiv = document.getElementById('status');
-        const messagesDiv = document.getElementById('messages');
+        // DOM Elements
+        const statusEl = document.getElementById('connection-status');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const messagesEl = document.getElementById('messages');
 
-        function connect() {
+        // Connect to MQTT broker
+        connectBtn.addEventListener('click', () => {
             try {
-                client = mqtt.connect(brokerUrl, options);
+                const config = {
+                    serverName: document.getElementById('serverName').value,
+                    mqttUrl: document.getElementById('mqttUrl').value,
+                    mqttReportTopic: document.getElementById('mqttReportTopic').value,
+                    gatewayMac: document.getElementById('gatewayMac').value,
+                    mqttBrokerUser: document.getElementById('mqttUser').value,
+                    mqttBrokerPassword: document.getElementById('mqttPassword').value
+                };
+
+                // Construct broker URL (try WebSocket first, fallback to MQTT)
+                const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+                const port = window.location.protocol === 'https:' ? '8884' : '8083';
+                const brokerUrl = `${protocol}${config.mqttUrl}:${port}`;
+
+                // Connect to MQTT broker with configuration
+                client = mqtt.connect(brokerUrl, {
+                    clientId: `gateway_${config.gatewayMac}_${Math.random().toString(16).substr(2, 8)}`,
+                    username: config.mqttBrokerUser,
+                    password: config.mqttBrokerPassword,
+                    clean: true,
+                    connectTimeout: 4000,
+                    reconnectPeriod: 1000,
+                    keepalive: 60
+                });
 
                 client.on('connect', () => {
-                    statusDiv.textContent = 'Connected';
-                    statusDiv.className = 'status connected';
-                    client.subscribe(topic);
-                    addMessage('System', 'Connected to MQTT broker and subscribed to ' + topic);
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'font-semibold text-green-500';
+                    
+                    // Enable/disable controls
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+
+                    // Subscribe to report topic
+                    client.subscribe(config.mqttReportTopic, (err) => {
+                        if (!err) {
+                            addMessage('System', `Subscribed to ${config.mqttReportTopic}`);
+                        } else {
+                            addMessage('Error', `Failed to subscribe: ${err.message}`);
+                        }
+                    });
+
+                    addMessage('System', `Connected to ${config.serverName} MQTT broker`);
                 });
 
                 client.on('message', (topic, message) => {
-                    const messageText = message.toString();
-                    addMessage(topic, messageText);
-                });
-
-                client.on('error', (error) => {
-                    addMessage('Error', error.message);
-                    statusDiv.textContent = 'Error: ' + error.message;
-                    statusDiv.className = 'status disconnected';
+                    const messageStr = message.toString();
+                    addMessage('Message', `${topic}: ${messageStr}`);
                 });
 
                 client.on('close', () => {
-                    statusDiv.textContent = 'Disconnected';
-                    statusDiv.className = 'status disconnected';
-                    addMessage('System', 'Disconnected from MQTT broker');
+                    handleDisconnect();
+                    addMessage('System', 'Disconnected from broker');
                 });
+
+                client.on('error', (error) => {
+                    handleDisconnect();
+                    addMessage('Error', `MQTT error: ${error.message}`);
+                    console.error('MQTT error:', error);
+                });
+
             } catch (error) {
-                addMessage('Error', 'Connection error: ' + error.message);
+                alert('Failed to connect to MQTT broker: ' + error.message);
+                console.error('Connection error:', error);
             }
+        });
+
+        // Disconnect from broker
+        disconnectBtn.addEventListener('click', () => {
+            if (client) {
+                client.end();
+            }
+        });
+
+        function addMessage(sender, message) {
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message text-sm';
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            
+            messageEl.innerHTML = `
+                <span class="text-gray-500">[${timestamp}]</span>
+                <span class="font-semibold">${sender}:</span>
+                <span class="ml-2">${message}</span>
+            `;
+            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
         }
 
-        function addMessage(topic, message) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message';
-            messageDiv.textContent = `${new Date().toLocaleTimeString()} - ${topic}: ${message}`;
-            messagesDiv.insertBefore(messageDiv, messagesDiv.firstChild);
+        function handleDisconnect() {
+            statusEl.textContent = 'Disconnected';
+            statusEl.className = 'font-semibold text-red-500';
+            
+            // Reset controls
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            
+            client = null;
         }
-
-        // Connect on page load
-        connect();
     </script>
 </body>
 </html>
