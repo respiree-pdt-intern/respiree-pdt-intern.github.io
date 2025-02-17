@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Client</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h1 class="text-2xl font-bold mb-4">MQTT Client</h1>
+            
+            <!-- Connection Status -->
+            <div class="mb-4">
+                <p>Status: <span id="connection-status" class="font-semibold text-red-500">Disconnected</span></p>
+            </div>
+
+            <!-- Connection Controls -->
+            <div class="mb-6">
+                <input type="text" id="broker-url" 
+                    class="border rounded px-3 py-2 mr-2 w-64" 
+                    placeholder="ws://broker.hivemq.com:8000/mqtt"
+                    value="ws://broker.hivemq.com:8000/mqtt">
+                <button id="connect-btn" 
+                    class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
+                    Connect
+                </button>
+                <button id="disconnect-btn" 
+                    class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600" 
+                    disabled>
+                    Disconnect
+                </button>
+            </div>
+
+            <!-- Publish Controls -->
+            <div class="mb-6 p-4 border rounded bg-gray-50">
+                <h3 class="font-bold mb-2">Publish Message</h3>
+                <div class="flex space-x-2 mb-2">
+                    <input type="text" id="pub-topic" 
+                        class="border rounded px-3 py-2 flex-1" 
+                        placeholder="Topic (e.g., sensors/temperature)">
+                    <input type="text" id="pub-message" 
+                        class="border rounded px-3 py-2 flex-1" 
+                        placeholder="Message">
+                    <button id="publish-btn" 
+                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                        disabled>
+                        Publish
+                    </button>
+                </div>
+            </div>
+
+            <!-- Subscribe Controls -->
+            <div class="mb-6 p-4 border rounded bg-gray-50">
+                <h3 class="font-bold mb-2">Subscribe to Topic</h3>
+                <div class="flex space-x-2 mb-2">
+                    <input type="text" id="sub-topic" 
+                        class="border rounded px-3 py-2 flex-1" 
+                        placeholder="Topic (e.g., sensors/#)">
+                    <button id="subscribe-btn" 
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                        disabled>
+                        Subscribe
+                    </button>
+                </div>
+            </div>
+
+            <!-- Messages Log -->
+            <div class="border rounded p-4 h-64 overflow-y-auto bg-gray-50">
+                <div id="messages" class="space-y-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let client = null;
+
+        // DOM Elements
+        const statusEl = document.getElementById('connection-status');
+        const brokerUrlEl = document.getElementById('broker-url');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const publishBtn = document.getElementById('publish-btn');
+        const subscribeBtn = document.getElementById('subscribe-btn');
+        const messagesEl = document.getElementById('messages');
+
+        // Connect to MQTT broker
+        connectBtn.addEventListener('click', () => {
+            try {
+                const brokerUrl = brokerUrlEl.value;
+                
+                // Connect to MQTT broker
+                client = mqtt.connect(brokerUrl, {
+                    clientId: 'mqtt_client_' + Math.random().toString(16).substr(2, 8)
+                });
+
+                client.on('connect', () => {
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'font-semibold text-green-500';
+                    
+                    // Enable/disable controls
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    publishBtn.disabled = false;
+                    subscribeBtn.disabled = false;
+                    brokerUrlEl.disabled = true;
+
+                    addMessage('System', 'Connected to MQTT broker');
+                });
+
+                client.on('message', (topic, message) => {
+                    const messageStr = message.toString();
+                    addMessage('Message', `${topic}: ${messageStr}`);
+                });
+
+                client.on('close', () => {
+                    handleDisconnect();
+                    addMessage('System', 'Disconnected from broker');
+                });
+
+                client.on('error', (error) => {
+                    handleDisconnect();
+                    addMessage('Error', 'MQTT error occurred');
+                    console.error('MQTT error:', error);
+                });
+
+            } catch (error) {
+                alert('Failed to connect to MQTT broker: ' + error.message);
+                console.error('Connection error:', error);
+            }
+        });
+
+        // Disconnect from broker
+        disconnectBtn.addEventListener('click', () => {
+            if (client) {
+                client.end();
+            }
+        });
+
+        // Publish message
+        publishBtn.addEventListener('click', () => {
+            const topic = document.getElementById('pub-topic').value;
+            const message = document.getElementById('pub-message').value;
+
+            if (topic && message && client) {
+                client.publish(topic, message);
+                addMessage('Publish', `${topic}: ${message}`);
+            }
+        });
+
+        // Subscribe to topic
+        subscribeBtn.addEventListener('click', () => {
+            const topic = document.getElementById('sub-topic').value;
+
+            if (topic && client) {
+                client.subscribe(topic, (err) => {
+                    if (!err) {
+                        addMessage('System', `Subscribed to ${topic}`);
+                    } else {
+                        addMessage('Error', `Failed to subscribe to ${topic}`);
+                    }
+                });
+            }
+        });
+
+        function addMessage(sender, message) {
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message text-sm';
+            
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString();
+            
+            messageEl.innerHTML = `
+                <span class="text-gray-500">[${timestamp}]</span>
+                <span class="font-semibold">${sender}:</span>
+                <span class="ml-2">${message}</span>
+            `;
+            messagesEl.insertBefore(messageEl, messagesEl.firstChild);
+        }
+
+        function handleDisconnect() {
+            statusEl.textContent = 'Disconnected';
+            statusEl.className = 'font-semibold text-red-500';
+            
+            // Reset controls
+            connectBtn.disabled = false;
+            disconnectBtn.disabled = true;
+            publishBtn.disabled = true;
+            subscribeBtn.disabled = true;
+            brokerUrlEl.disabled = false;
+            
+            client = null;
+        }
+    </script>
+</body>
+</html>
