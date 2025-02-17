@@ -12,6 +12,15 @@
         <div class="bg-white rounded-lg shadow-md p-6">
             <h1 class="text-2xl font-bold mb-4">MQTT Client</h1>
             
+            <!-- Broker Selection -->
+            <div class="mb-4">
+                <select id="broker-select" class="border rounded px-3 py-2 w-full">
+                    <option value="wss://broker.hivemq.com:8884/mqtt">HiveMQ (Secure)</option>
+                    <option value="wss://broker.emqx.io:8084/mqtt">EMQX (Secure)</option>
+                    <option value="wss://mqtt.eclipseprojects.io:443/mqtt">Eclipse (Secure)</option>
+                </select>
+            </div>
+            
             <!-- Connection Status -->
             <div class="mb-4">
                 <p>Status: <span id="connection-status" class="font-semibold text-red-500">Disconnected</span></p>
@@ -21,8 +30,8 @@
             <div class="mb-6">
                 <input type="text" id="broker-url" 
                     class="border rounded px-3 py-2 mr-2 w-64" 
-                    placeholder="ws://broker.hivemq.com:8000/mqtt"
-                    value="ws://broker.hivemq.com:8000/mqtt">
+                    placeholder="wss://broker.hivemq.com:8884/mqtt"
+                    value="wss://broker.hivemq.com:8884/mqtt">
                 <button id="connect-btn" 
                     class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
                     Connect
@@ -78,6 +87,7 @@
         let client = null;
 
         // DOM Elements
+        const brokerSelect = document.getElementById('broker-select');
         const statusEl = document.getElementById('connection-status');
         const brokerUrlEl = document.getElementById('broker-url');
         const connectBtn = document.getElementById('connect-btn');
@@ -86,14 +96,24 @@
         const subscribeBtn = document.getElementById('subscribe-btn');
         const messagesEl = document.getElementById('messages');
 
+        // Update broker URL when selection changes
+        brokerSelect.addEventListener('change', () => {
+            brokerUrlEl.value = brokerSelect.value;
+        });
+
         // Connect to MQTT broker
         connectBtn.addEventListener('click', () => {
             try {
                 const brokerUrl = brokerUrlEl.value;
                 
-                // Connect to MQTT broker
+                // Connect to MQTT broker with secure options
                 client = mqtt.connect(brokerUrl, {
-                    clientId: 'mqtt_client_' + Math.random().toString(16).substr(2, 8)
+                    clientId: 'mqttjs_' + Math.random().toString(16).substr(2, 8),
+                    protocolVersion: 4,
+                    clean: true,
+                    connectTimeout: 4000,
+                    reconnectPeriod: 1000,
+                    keepalive: 60
                 });
 
                 client.on('connect', () => {
@@ -106,6 +126,7 @@
                     publishBtn.disabled = false;
                     subscribeBtn.disabled = false;
                     brokerUrlEl.disabled = true;
+                    brokerSelect.disabled = true;
 
                     addMessage('System', 'Connected to MQTT broker');
                 });
@@ -190,6 +211,7 @@
             publishBtn.disabled = true;
             subscribeBtn.disabled = true;
             brokerUrlEl.disabled = false;
+            brokerSelect.disabled = false;
             
             client = null;
         }
