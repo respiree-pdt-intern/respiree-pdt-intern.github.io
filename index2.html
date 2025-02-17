@@ -3,23 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MQTT Client</title>
+    <title>Respiree MQTT Client</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
 </head>
 <body class="bg-gray-100 p-8">
     <div class="max-w-2xl mx-auto">
         <div class="bg-white rounded-lg shadow-md p-6">
-            <h1 class="text-2xl font-bold mb-4">MQTT Client</h1>
-            
-            <!-- Broker Selection -->
-            <div class="mb-4">
-                <select id="broker-select" class="border rounded px-3 py-2 w-full">
-                    <option value="wss://broker.hivemq.com:8884/mqtt">HiveMQ (Secure)</option>
-                    <option value="wss://broker.emqx.io:8084/mqtt">EMQX (Secure)</option>
-                    <option value="wss://mqtt.eclipseprojects.io:443/mqtt">Eclipse (Secure)</option>
-                </select>
-            </div>
+            <h1 class="text-2xl font-bold mb-4">Respiree MQTT Client</h1>
             
             <!-- Connection Status -->
             <div class="mb-4">
@@ -28,10 +19,24 @@
 
             <!-- Connection Controls -->
             <div class="mb-6">
-                <input type="text" id="broker-url" 
-                    class="border rounded px-3 py-2 mr-2 w-64" 
-                    placeholder="wss://broker.hivemq.com:8884/mqtt"
-                    value="wss://broker.hivemq.com:8884/mqtt">
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <input type="text" id="server-input" 
+                        class="border rounded px-3 py-2" 
+                        value="domain.com"
+                        placeholder="Server">
+                    <input type="text" id="port-input" 
+                        class="border rounded px-3 py-2" 
+                        value="8883"
+                        placeholder="Port">
+                    <input type="text" id="username-input" 
+                        class="border rounded px-3 py-2" 
+                        value="respiree"
+                        placeholder="Username">
+                    <input type="password" id="password-input" 
+                        class="border rounded px-3 py-2" 
+                        value="respiree@2020"
+                        placeholder="Password">
+                </div>
                 <button id="connect-btn" 
                     class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mr-2">
                     Connect
@@ -43,33 +48,36 @@
                 </button>
             </div>
 
-            <!-- Publish Controls -->
-            <div class="mb-6 p-4 border rounded bg-gray-50">
-                <h3 class="font-bold mb-2">Publish Message</h3>
-                <div class="flex space-x-2 mb-2">
-                    <input type="text" id="pub-topic" 
-                        class="border rounded px-3 py-2 flex-1" 
-                        placeholder="Topic (e.g., sensors/temperature)">
-                    <input type="text" id="pub-message" 
-                        class="border rounded px-3 py-2 flex-1" 
-                        placeholder="Message">
-                    <button id="publish-btn" 
-                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-                        disabled>
-                        Publish
-                    </button>
-                </div>
+            <!-- Device Selection -->
+            <div class="mb-6">
+                <select id="device-select" class="border rounded px-3 py-2 w-full">
+                    <option value="a">Device A</option>
+                    <option value="b">Device B</option>
+                    <option value="c">Device C</option>
+                    <option value="d">Device D</option>
+                    <option value="e">Device E</option>
+                    <option value="f">Device F</option>
+                </select>
             </div>
 
             <!-- Subscribe Controls -->
             <div class="mb-6 p-4 border rounded bg-gray-50">
-                <h3 class="font-bold mb-2">Subscribe to Topic</h3>
-                <div class="flex space-x-2 mb-2">
-                    <input type="text" id="sub-topic" 
-                        class="border rounded px-3 py-2 flex-1" 
-                        placeholder="Topic (e.g., sensors/#)">
+                <h3 class="font-bold mb-2">Subscribe to Topics</h3>
+                <div class="space-y-2">
+                    <div>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" class="form-checkbox" value="esp32-admin/server/report" checked>
+                            <span class="ml-2">Report State Topic</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" class="form-checkbox" value="sg dev {device}/b/c" checked>
+                            <span class="ml-2">Device Topic</span>
+                        </label>
+                    </div>
                     <button id="subscribe-btn" 
-                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2"
                         disabled>
                         Subscribe
                     </button>
@@ -87,28 +95,29 @@
         let client = null;
 
         // DOM Elements
-        const brokerSelect = document.getElementById('broker-select');
         const statusEl = document.getElementById('connection-status');
-        const brokerUrlEl = document.getElementById('broker-url');
         const connectBtn = document.getElementById('connect-btn');
         const disconnectBtn = document.getElementById('disconnect-btn');
-        const publishBtn = document.getElementById('publish-btn');
         const subscribeBtn = document.getElementById('subscribe-btn');
+        const deviceSelect = document.getElementById('device-select');
         const messagesEl = document.getElementById('messages');
-
-        // Update broker URL when selection changes
-        brokerSelect.addEventListener('change', () => {
-            brokerUrlEl.value = brokerSelect.value;
-        });
 
         // Connect to MQTT broker
         connectBtn.addEventListener('click', () => {
             try {
-                const brokerUrl = brokerUrlEl.value;
+                const server = document.getElementById('server-input').value;
+                const port = document.getElementById('port-input').value;
+                const username = document.getElementById('username-input').value;
+                const password = document.getElementById('password-input').value;
+
+                // Construct broker URL
+                const brokerUrl = `wss://${server}:${port}/mqtt`;
                 
-                // Connect to MQTT broker with secure options
+                // Connect to MQTT broker
                 client = mqtt.connect(brokerUrl, {
-                    clientId: 'mqttjs_' + Math.random().toString(16).substr(2, 8),
+                    clientId: 'respiree_client_' + Math.random().toString(16).substr(2, 8),
+                    username: username,
+                    password: password,
                     protocolVersion: 4,
                     clean: true,
                     connectTimeout: 4000,
@@ -123,12 +132,17 @@
                     // Enable/disable controls
                     connectBtn.disabled = true;
                     disconnectBtn.disabled = false;
-                    publishBtn.disabled = false;
                     subscribeBtn.disabled = false;
-                    brokerUrlEl.disabled = true;
-                    brokerSelect.disabled = true;
+
+                    document.getElementById('server-input').disabled = true;
+                    document.getElementById('port-input').disabled = true;
+                    document.getElementById('username-input').disabled = true;
+                    document.getElementById('password-input').disabled = true;
 
                     addMessage('System', 'Connected to MQTT broker');
+                    
+                    // Auto-subscribe to topics
+                    subscribeToTopics();
                 });
 
                 client.on('message', (topic, message) => {
@@ -160,31 +174,37 @@
             }
         });
 
-        // Publish message
-        publishBtn.addEventListener('click', () => {
-            const topic = document.getElementById('pub-topic').value;
-            const message = document.getElementById('pub-message').value;
+        // Subscribe to topics
+        subscribeBtn.addEventListener('click', subscribeToTopics);
 
-            if (topic && message && client) {
-                client.publish(topic, message);
-                addMessage('Publish', `${topic}: ${message}`);
+        // Update topics when device selection changes
+        deviceSelect.addEventListener('change', () => {
+            if (client && client.connected) {
+                subscribeToTopics();
             }
         });
 
-        // Subscribe to topic
-        subscribeBtn.addEventListener('click', () => {
-            const topic = document.getElementById('sub-topic').value;
-
-            if (topic && client) {
-                client.subscribe(topic, (err) => {
-                    if (!err) {
-                        addMessage('System', `Subscribed to ${topic}`);
-                    } else {
-                        addMessage('Error', `Failed to subscribe to ${topic}`);
-                    }
-                });
-            }
-        });
+        function subscribeToTopics() {
+            const device = deviceSelect.value;
+            const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    let topic = checkbox.value;
+                    
+                    // Replace {device} placeholder with selected device
+                    topic = topic.replace('{device}', device);
+                    
+                    client.subscribe(topic, (err) => {
+                        if (!err) {
+                            addMessage('System', `Subscribed to ${topic}`);
+                        } else {
+                            addMessage('Error', `Failed to subscribe to ${topic}`);
+                        }
+                    });
+                }
+            });
+        }
 
         function addMessage(sender, message) {
             const messageEl = document.createElement('div');
@@ -208,10 +228,12 @@
             // Reset controls
             connectBtn.disabled = false;
             disconnectBtn.disabled = true;
-            publishBtn.disabled = true;
             subscribeBtn.disabled = true;
-            brokerUrlEl.disabled = false;
-            brokerSelect.disabled = false;
+
+            document.getElementById('server-input').disabled = false;
+            document.getElementById('port-input').disabled = false;
+            document.getElementById('username-input').disabled = false;
+            document.getElementById('password-input').disabled = false;
             
             client = null;
         }
